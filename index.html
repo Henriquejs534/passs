@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Passarinho Voador</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:#111;
+  font-family:Arial,sans-serif;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+  overflow:hidden;
+}
+#game{
+  position:relative;
+  width:100vw;
+  max-width:700px;
+  height:100vh;
+  max-height:700px;
+  overflow:hidden;
+  background:linear-gradient(#69c8ff,#d9f5ff);
+}
+canvas{
+  width:100%;
+  height:100%;
+  display:block;
+  touch-action:none;
+}
+#hud{
+  position:absolute;
+  top:15px;
+  left:15px;
+  right:15px;
+  display:flex;
+  justify-content:space-between;
+  color:white;
+  font-size:20px;
+  font-weight:bold;
+  text-shadow:2px 2px 3px #000;
+  pointer-events:none;
+}
+#start,#gameOver{
+  position:absolute;
+  inset:0;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  text-align:center;
+}
+.box{
+  background:rgba(255,255,255,.94);
+  padding:25px;
+  border-radius:20px;
+  box-shadow:0 8px 30px #0005;
+}
+h1{margin-top:0}
+button{
+  border:0;
+  border-radius:12px;
+  padding:14px 25px;
+  font-size:18px;
+  font-weight:bold;
+  cursor:pointer;
+}
+#gameOver{display:none}
+</style>
+</head>
+
+<body>
+
+<div id="game">
+
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <span>🐦 Pontos: <span id="score">0</span></span>
+  <span>🏆 Recorde: <span id="best">0</span></span>
+</div>
+
+<div id="start">
+  <div class="box">
+    <h1>🐦 Passarinho Voador</h1>
+    <p>Toque na tela para o passarinho voar.</p>
+    <p>Não deixe ele bater nos obstáculos!</p>
+    <button id="startBtn">JOGAR</button>
+  </div>
+</div>
+
+<div id="gameOver">
+  <div class="box">
+    <h1>💥 Fim de jogo!</h1>
+    <p>Pontuação: <b id="finalScore">0</b></p>
+    <button id="restartBtn">🔄 REINICIAR</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function resize(){
+  canvas.width = Math.min(window.innerWidth,700);
+  canvas.height = Math.min(window.innerHeight,700);
+}
+resize();
+window.addEventListener("resize",resize);
+
+let bird;
+let obstacles;
+let score;
+let best = Number(localStorage.getItem("birdBest") || 0);
+let gameRunning = false;
+let gameOver = false;
+let speed;
+let timer;
+let lastTime;
+
+document.getElementById("best").textContent = best;
+
+function resetGame(){
+  bird={
+    x:canvas.width*0.25,
+    y:canvas.height*0.5,
+    velocity:0,
+    radius:18
+  };
+
+  obstacles=[];
+  score=0;
+  speed=3;
+  timer=0;
+  gameOver=false;
+
+  document.getElementById("score").textContent="0";
+  document.getElementById("gameOver").style.display="none";
+}
+
+function startGame(){
+  resetGame();
+
+  document.getElementById("start").style.display="none";
+
+  gameRunning=true;
+  lastTime=performance.now();
+
+  requestAnimationFrame(loop);
+}
+
+function flap(){
+  if(!gameRunning){
+    return;
+  }
+
+  bird.velocity=-7;
+}
+
+function createObstacle(){
+  const gap=170;
+
+  const minTop=50;
+  const maxTop=canvas.height-gap-80;
+
+  const top=
+    minTop+
+    Math.random()*(maxTop-minTop);
+
+  obstacles.push({
+    x:canvas.width+40,
+    width:65,
+    top:top,
+    gap:gap,
+    passed:false
+  });
+}
+
+function endGame(){
+  if(!gameRunning)return;
+
+  gameRunning=false;
+  gameOver=true;
+
+  document.getElementById("finalScore").textContent=score;
+
+  if(score>best){
+    best=score;
+    localStorage.setItem("birdBest",best);
+  }
+
+  document.getElementById("best").textContent=best;
+  document.getElementById("gameOver").style.display="flex";
+}
+
+function update(dt){
+
+  // gravidade
+  bird.velocity += 0.38*dt;
+  bird.y += bird.velocity*dt;
+
+  // velocidade aumenta lentamente
+  speed += 0.002*dt;
+
+  // criar obstáculos
+  timer += dt;
+
+  if(timer>90){
+    timer=0;
+    createObstacle();
+  }
+
+  for(let i=obstacles.length-1;i>=0;i--){
+
+    const o=obstacles[i];
+
+    o.x-=speed*dt;
+
+    // passou pelo obstáculo
+    if(!o.passed && o.x+o.width<bird.x){
+
+      o.passed=true;
+      score++;
+
+      document.getElementById("score").textContent=score;
+    }
+
+    // colisão
+    const horizontal=
+      bird.x+bird.radius>o.x &&
+      bird.x-bird.radius<o.x+o.width;
+
+    const vertical=
+      bird.y-bird.radius<o.top ||
+      bird.y+bird.radius>o.top+o.gap;
+
+    if(horizontal && vertical){
+      endGame();
+    }
+
+    if(o.x+o.width<0){
+      obstacles.splice(i,1);
+    }
+  }
+
+  // chão/teto
+  if(
+    bird.y-bird.radius<0 ||
+    bird.y+bird.radius>canvas.height
+  ){
+    endGame();
+  }
+}
+
+function draw(){
+
+  // céu
+  const gradient=ctx.createLinearGradient(
+    0,0,0,canvas.height
+  );
+
+  gradient.addColorStop(0,"#69c8ff");
+  gradient.addColorStop(1,"#e5faff");
+
+  ctx.fillStyle=gradient;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // nuvens
+  ctx.fillStyle="rgba(255,255,255,.8)";
+
+  for(let i=0;i<5;i++){
+
+    const x=(i*180+80)%(canvas.width+150);
+    const y=70+(i%3)*70;
+
+    ctx.beginPath();
+    ctx.arc(x,y,25,0,Math.PI*2);
+    ctx.arc(x+30,y,20,0,Math.PI*2);
+    ctx.arc(x+55,y,25,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // obstáculos
+  for(const o of obstacles){
+
+    ctx.fillStyle="#35a852";
+
+    ctx.fillRect(
+      o.x,
+      0,
+      o.width,
+      o.top
+    );
+
+    ctx.fillRect(
+      o.x,
+      o.top+o.gap,
+      o.width,
+      canvas.height
+    );
+
+    ctx.fillStyle="#25843e";
+
+    ctx.fillRect(
+      o.x-6,
+      o.top-12,
+      o.width+12,
+      12
+    );
+
+    ctx.fillRect(
+      o.x-6,
+      o.top+o.gap,
+      o.width+12,
+      12
+    );
+  }
+
+  // chão
+  ctx.fillStyle="#65b34f";
+
+  ctx.fillRect(
+    0,
+    canvas.height-18,
+    canvas.width,
+    18
+  );
+
+  // passarinho
+  ctx.save();
+
+  ctx.translate(bird.x,bird.y);
+
+  ctx.rotate(
+    Math.max(
+      -.5,
+      Math.min(.8,bird.velocity*.06)
+    )
+  );
+
+  // corpo
+  ctx.fillStyle="#ffd43b";
+
+  ctx.beginPath();
+  ctx.arc(
+    0,
+    0,
+    bird.radius,
+    0,
+    Math.PI*2
+  );
+
+  ctx.fill();
+
+  // asa
+  ctx.fillStyle="#f59f00";
+
+  ctx.beginPath();
+
+  ctx.ellipse(
+    -8,
+    6,
+    11,
+    6,
+    0,
+    0,
+    Math.PI*2
+  );
+
+  ctx.fill();
+
+  // olho
+  ctx.fillStyle="white";
+
+  ctx.beginPath();
+  ctx.arc(7,-7,7,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="black";
+
+  ctx.beginPath();
+  ctx.arc(9,-7,3,0,Math.PI*2);
+  ctx.fill();
+
+  // bico
+  ctx.fillStyle="#ff8c00";
+
+  ctx.beginPath();
+  ctx.moveTo(16,0);
+  ctx.lineTo(32,6);
+  ctx.lineTo(16,10);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function loop(time){
+
+  if(!gameRunning)return;
+
+  const dt=Math.min(
+    2,
+    (time-lastTime)/16.67
+  );
+
+  lastTime=time;
+
+  update(dt);
+  draw();
+
+  if(gameRunning){
+    requestAnimationFrame(loop);
+  }
+}
+
+// toque na tela
+canvas.addEventListener("pointerdown",function(e){
+  e.preventDefault();
+  flap();
+});
+
+// botão jogar
+document.getElementById("startBtn")
+.addEventListener("click",startGame);
+
+// botão reiniciar
+document.getElementById("restartBtn")
+.addEventListener("click",startGame);
+
+// teclado
+document.addEventListener("keydown",function(e){
+
+  if(e.code==="Space"){
+    e.preventDefault();
+
+    if(!gameRunning && !gameOver){
+      startGame();
+    }else{
+      flap();
+    }
+  }
+});
+
+resetGame();
+draw();
+</script>
+
+</body>
+</html>
